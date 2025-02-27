@@ -74,7 +74,7 @@
                 autoClearEnabled = !autoClearEnabled;
                 localStorage.setItem("autoClearEnabled", autoClearEnabled ? "true" : "false");
                 toggleOption.textContent = autoClearEnabled ? "Auto Clear: On" : "Auto Clear: Off";
-                addStatusMessage("Auto Clear toggled " + (autoClearEnabled ? "On" : "Off"));
+                setStatusMessage("Auto Clear toggled " + (autoClearEnabled ? "On" : "Off"));
             });
             dropdown.appendChild(toggleOption);
 
@@ -112,11 +112,14 @@
         return container;
     }
 
-    // Append status messages to the status container
-    function addStatusMessage(message) {
-        const container = createStatusContainer();
-        const msgEl = document.createElement("span");
-        msgEl.textContent = message;
+// Overwrite old status messages instead of appending new ones.
+function setStatusMessage(message) {
+    const container = createStatusContainer();
+    // Try to locate an existing message element.
+    let msgEl = container.querySelector("span.status-msg");
+    if (!msgEl) {
+        msgEl = document.createElement("span");
+        msgEl.className = "status-msg";
         msgEl.style.fontWeight = "bold";
         msgEl.style.marginLeft = "10px";
         const mainSpan = container.querySelector("span.main-status");
@@ -126,6 +129,9 @@
             container.appendChild(msgEl);
         }
     }
+    // Overwrite the existing text.
+    msgEl.textContent = message;
+}
 
     // Retrieve your IP from the header element
     function getMyIP() {
@@ -203,14 +209,14 @@
     function checkAndClearLogs() {
         if (!autoClearEnabled) {
             console.log("Auto log clearing is disabled.");
-            addStatusMessage("Auto log clearing is disabled.");
+            setStatusMessage("Auto log clearing is disabled.");
             return;
         }
 
         let logArea = document.querySelector('.logarea');
         if (!logArea) {
             console.log("Log area element not found.");
-            addStatusMessage("Looking for logs 👀");
+            setStatusMessage("Looking for logs 👀");
             return;
         }
         let logText = logArea.value || logArea.innerText;
@@ -219,7 +225,7 @@
         if (window.location.pathname === "/log") {
             console.log("On log page, clearing logs...");
             logArea.value = "";
-            addStatusMessage("Logs cleared.");
+            setStatusMessage("Logs cleared.");
             let editLogBtn = document.querySelector('input[type="submit"][value="Edit log file"]');
             if (editLogBtn) {
                 console.log("Clicking the Edit log file button...");
@@ -234,14 +240,14 @@
         let myIP = getMyIP();
         if (!myIP) {
             console.log("Unable to retrieve IP. Aborting log check.");
-            addStatusMessage("IP not found.");
+            setStatusMessage("IP not found.");
             return;
         }
         console.log("My IP:", myIP);
         if (logText.includes(myIP)) {
             console.log("IP found in logs. Clearing logs...");
             logArea.value = "";
-            addStatusMessage("Logs cleared for IP: " + myIP);
+            setStatusMessage("Logs cleared for IP: " + myIP);
             let editLogBtn = document.querySelector('input[type="submit"][value="Edit log file"]');
             if (editLogBtn) {
                 console.log("Clicking the Edit log file button...");
@@ -253,7 +259,7 @@
             }
         } else {
             console.log("IP not found in logs. No action taken.");
-            addStatusMessage("No log entries for IP: " + myIP);
+            setStatusMessage("No log entries for IP: " + myIP);
         }
     }
 
