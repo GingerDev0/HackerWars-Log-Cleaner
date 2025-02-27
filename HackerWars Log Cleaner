@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         HackerWars Log Cleaner
+// @name         HackerWars Log Cleaner with Dropdown Toggle
 // @namespace    http://tampermonkey.net/
-// @version      1.0.0
-// @description  Checks logs for your IP, clears them if found, then listens for various success alerts and redirects or logs in accordingly.
+// @version      1.1.0
+// @description  Checks logs for your IP, clears them if found (when enabled), then listens for various alerts and redirects/logs in accordingly.
 // @match        https://hackerwars.io/*
 // @grant        none
 // ==/UserScript==
@@ -10,12 +10,23 @@
 (function() {
     'use strict';
 
+    // Get persistent state (default true)
+    let autoClearEnabled = localStorage.getItem("autoClearEnabled");
+    if (autoClearEnabled === null) {
+        autoClearEnabled = true;
+        localStorage.setItem("autoClearEnabled", "true");
+    } else {
+        autoClearEnabled = (autoClearEnabled === "true");
+    }
+
+    // Creates the main status container and dropdown menu
     function createStatusContainer() {
         let container = document.getElementById("hw-status-container");
         if (!container) {
             container = document.createElement("li");
             container.id = "hw-status-container";
             container.className = "btn btn-inverse";
+            container.style.position = "relative"; // for dropdown positioning
 
             let link = document.createElement("a");
             link.href = "#";
@@ -37,6 +48,55 @@
             link.appendChild(mainSpan);
             container.appendChild(link);
 
+            // Create dropdown menu (hidden by default)
+            let dropdown = document.createElement("div");
+            dropdown.id = "hw-status-dropdown";
+            dropdown.style.position = "absolute";
+            dropdown.style.top = "100%";
+            dropdown.style.left = "0";
+            dropdown.style.backgroundColor = "#000";
+            dropdown.style.border = "1px solid #ccc";
+            dropdown.style.padding = "5px";
+            dropdown.style.zIndex = "1000";
+            dropdown.style.display = "none";
+            dropdown.style.minWidth = "150px";
+
+            // Create the auto-clear toggle option
+            let toggleOption = document.createElement("div");
+            toggleOption.id = "hw-auto-clear-toggle";
+            toggleOption.style.cursor = "pointer";
+            toggleOption.style.padding = "5px";
+            toggleOption.style.borderBottom = "1px solid #eee";
+            toggleOption.textContent = autoClearEnabled ? "Auto Clear Logs: On" : "Auto Clear Logs: Off";
+            toggleOption.addEventListener("click", function(e) {
+                // Prevent dropdown from immediately closing when clicking inside
+                e.stopPropagation();
+                autoClearEnabled = !autoClearEnabled;
+                localStorage.setItem("autoClearEnabled", autoClearEnabled ? "true" : "false");
+                toggleOption.textContent = autoClearEnabled ? "Auto Clear: On" : "Auto Clear: Off";
+                addStatusMessage("Auto Clear toggled " + (autoClearEnabled ? "On" : "Off"));
+            });
+            dropdown.appendChild(toggleOption);
+
+            // Optionally, you can add more options here
+
+            container.appendChild(dropdown);
+
+            // Toggle dropdown visibility when the status link is clicked
+            link.addEventListener("click", function(e) {
+                e.preventDefault();
+                // Toggle dropdown visibility
+                dropdown.style.display = dropdown.style.display === "none" ? "block" : "none";
+            });
+
+            // Hide dropdown when clicking outside the container
+            document.addEventListener("click", function(e) {
+                if (!container.contains(e.target)) {
+                    dropdown.style.display = "none";
+                }
+            });
+
+            // Insert the container into the page navigation
             let userNav = document.getElementById("user-nav");
             if (userNav) {
                 let btnGroup = userNav.querySelector("ul.nav.btn-group");
@@ -52,6 +112,7 @@
         return container;
     }
 
+    // Append status messages to the status container
     function addStatusMessage(message) {
         const container = createStatusContainer();
         const msgEl = document.createElement("span");
@@ -78,7 +139,6 @@
 
     // Listen for various alert messages and take appropriate action
     function listenForAlerts() {
-        // Helper to process an alert element's text content
         function handleAlert(alertElement) {
             const alertText = alertElement.innerText;
             if (alertText.includes('Log successfully edited')) {
@@ -109,7 +169,7 @@
             }
         }
 
-        // Check immediately if any alert (success or danger) is already present
+        // Check immediately if any alert is already present
         const existingAlertSuccess = document.querySelector('.alert.alert-success');
         const existingAlertDanger = document.querySelector('.alert.alert-danger');
         if (existingAlertSuccess) {
@@ -141,6 +201,12 @@
 
     // Function that checks the logs and clears them if on the log page or if your IP is found
     function checkAndClearLogs() {
+        if (!autoClearEnabled) {
+            console.log("Auto log clearing is disabled.");
+            addStatusMessage("Auto log clearing is disabled.");
+            return;
+        }
+
         let logArea = document.querySelector('.logarea');
         if (!logArea) {
             console.log("Log area element not found.");
@@ -190,6 +256,9 @@
             addStatusMessage("No log entries for IP: " + myIP);
         }
     }
+
+    // Initialize status container (with dropdown)
+    createStatusContainer();
 
     // Wait a few seconds to ensure the page and logs are fully loaded before attempting to clear logs
     setTimeout(checkAndClearLogs, 500);
