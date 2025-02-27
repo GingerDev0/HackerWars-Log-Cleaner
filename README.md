@@ -29,12 +29,12 @@ All parsed data is stored persistently in localStorage and can be viewed and edi
 
 - **BTC Address Parsing:**  
   Extracts BTC address details from log lines such as:  
-  `2025-02-27 20:46 - localhost logged in to [238.250.31.113] on account r4IUAo7OchzL3d2nrf0Kg3O4CGpdWV9Qkx using key CjizhbCYHW64509iPddWOw46ipt3zCoZZNg6i06MggKVIzt2feJCzKyiQ7HFmTHq`  
+  `2025-02-27 20:46 - localhost logged in to [XXX.XXX.XXX.XXX] on account r4IUAo7OchzL6d2nrf0Kg3O4CGpdWV9Qkx using key CjizhbCYHW64509iPddWOw46ipt3zCoZYNg8i06MggKVIzt2deJCzKyiQ7HFmTHq`  
   The script captures both the account and the key, merging new entries with previously stored data.
 
 - **Bank Account Parsing:**  
   Extracts bank account information from logs formatted like:  
-  `2025-02-27 20:47 - localhost logged on account #227315218 on bank [37.17.74.243]`  
+  `2025-02-27 20:47 - localhost logged on account #XXXXXXXXX on bank [XXX.XXX.XXX.XXX]`  
   It captures the account number and bank IP, and persists this data in localStorage.
 
 - **Parsed Data Modals:**  
@@ -108,7 +108,7 @@ After installation, the script runs automatically on any page under `https://hac
   If you see a "Log area element not found" message, verify you are on the correct page where logs are displayed.
 
 - **Data Parsing Issues:**  
-  - Confirm log entries follow the expected formats (e.g., `[205.135.68.189]` for IPs, the proper format for BTC and bank entries).
+  - Confirm log entries follow the expected formats (e.g., `[XXX.XXX.XXX.XXX]` for IPs, the proper format for BTC and bank entries).
   - Check the browser console for debugging logs regarding data extraction.
   - Ensure localStorage is updating with keys like `savedIPs`, `savedBTC`, and `savedBank`.
 
