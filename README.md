@@ -1,4 +1,4 @@
-# HackerWars Log Cleaner 
+# HackerWars Log Cleaner
 
 A Tampermonkey userscript designed to automatically clear your logs on HackerWars if your IP is detected, while dynamically handling various alerts to ensure a smooth workflow.
 
@@ -20,6 +20,9 @@ A Tampermonkey userscript designed to automatically clear your logs on HackerWar
   - Login attempts if duplicate IP errors or password cracked messages are detected.
   - Redirects to the log page on software installation/uninstallation alerts.
   
+- **Status Dropdown Menu with Auto-Clear Toggle:**  
+  The status container in the navigation now features a dropdown menu. Clicking on the "Status" button reveals the dropdown, which contains the auto log clearing toggle. You can easily turn auto log clearing on or off, with your preference saved via localStorage for persistence across sessions.
+  
 - **Status Updates:**  
   Displays real-time status messages on the page using a dynamically created status container.
 
@@ -40,8 +43,8 @@ A Tampermonkey userscript designed to automatically clear your logs on HackerWar
 ## How It Works
 
 1. **Initialization:**  
-   - The script creates a status container to display log and alert status messages.
-
+   - The script creates a status container integrated into the site's navigation. This container now includes a dropdown menu that holds the auto log clearing toggle option.
+   
 2. **IP Retrieval:**  
    - It searches for an element with the class `.header-ip-show` to extract your current IP address.
 
@@ -55,7 +58,9 @@ A Tampermonkey userscript designed to automatically clear your logs on HackerWar
 
 ## Usage
 
-Once installed, the script automatically executes on any page under `https://hackerwars.io/*`. Monitor the status container (integrated into the site's navigation or appended to the body) for updates regarding log clearance and alert handling.
+Once installed, the script automatically executes on any page under `https://hackerwars.io/*`. Use the "Status" dropdown in the navigation to:
+- Monitor updates regarding log clearance and alert handling.
+- Toggle the auto log clearing feature on or off as needed.
 
 ## Troubleshooting
 
@@ -71,7 +76,7 @@ Once installed, the script automatically executes on any page under `https://hac
 ## Customization
 
 - **Styling:**  
-  You can customize the appearance of the status container by modifying the relevant sections in the script.
+  You can customize the appearance of the status container and dropdown menu by modifying the relevant sections in the script.
 
 - **Alert Conditions:**  
   The script uses text matching to determine actions. If HackerWars updates its alert messages, update the text conditions in the `handleAlert` function accordingly.
