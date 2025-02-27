@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         HackerWars Log Cleaner with Dropdown, Custom Log Message & Insert
+// @name         HackerWars Log Cleaner with Dropdown, Custom Log Message & IP Parser
 // @namespace    http://tampermonkey.net/
-// @version      1.3.0
-// @description  Clears logs if conditions are met, inserts a custom log message into the log textarea, then clicks the edit button.
+// @version      1.4.0
+// @description  Clears logs if conditions are met, inserts a custom log message, parses IPs (except your own) on the logs page, and provides a modal for editing the saved IPs.
 // @match        https://hackerwars.io/*
 // @grant        none
 // ==/UserScript==
@@ -23,6 +23,8 @@
 
         // Retrieve saved custom log message (if any)
         let customLogMessage = localStorage.getItem("customLogMessage") || "";
+        // Retrieve saved IPs (if any) as an array; stored as JSON string.
+        let savedIPs = JSON.parse(localStorage.getItem("savedIPs") || "[]");
 
         // Creates the main status container and dropdown menu
         function createStatusContainer() {
@@ -97,6 +99,21 @@
                 });
                 dropdown.appendChild(customMsgOption);
 
+                // Create the "View/Edit Parsed IPs" option
+                let ipsOption = document.createElement("div");
+                ipsOption.id = "hw-ips-toggle";
+                ipsOption.style.cursor = "pointer";
+                ipsOption.style.padding = "5px";
+                ipsOption.style.borderBottom = "1px solid #eee";
+                ipsOption.textContent = "View/Edit Parsed IPs";
+                ipsOption.addEventListener("click", function(e) {
+                    e.stopPropagation();
+                    // Load saved IPs into the modal textarea before showing
+                    $("#ipsList").val(savedIPs.join("\n"));
+                    $("#ipsModal").modal("show");
+                });
+                dropdown.appendChild(ipsOption);
+
                 // (Add additional dropdown options here if needed)
 
                 container.appendChild(dropdown);
@@ -158,6 +175,36 @@
             console.log("IP element not found.");
             return null;
         }
+
+function parseIPsFromText(text) {
+    // Use a regex to match IPs enclosed in square brackets, e.g., [205.135.68.189]
+    const ipRegex = /\[(\d{1,3}(?:\.\d{1,3}){3})\]/g;
+    let matches = [];
+    let match;
+    while ((match = ipRegex.exec(text)) !== null) {
+        matches.push(match[1]);
+    }
+    // Remove duplicate IPs using a Set and return the result
+    return [...new Set(matches)];
+}
+
+function parseAndSaveIPs() {
+    if (window.location.href.indexOf("view=logs") === -1) return;
+    let logArea = document.querySelector('.logarea');
+    if (!logArea) {
+        console.log("Log area element not found for IP parsing.");
+        return;
+    }
+    let logText = logArea.value || logArea.innerText;
+    let allIPs = parseIPsFromText(logText);
+    let myIP = getMyIP();
+    // Filter out your own IP if present
+    let filteredIPs = allIPs.filter(ip => ip !== myIP);
+    savedIPs = filteredIPs; // update our local variable
+    localStorage.setItem("savedIPs", JSON.stringify(savedIPs));
+    setStatusMessage("Parsed IPs saved: " + savedIPs.join(", "));
+    console.log("Parsed IPs (excluding your IP):", savedIPs);
+}
 
         // Listen for various alert messages and take appropriate action
         function listenForAlerts() {
@@ -261,6 +308,8 @@
                     console.log("Log area is already empty. Inserting custom message.");
                     clearAndInsert();
                 }
+                // Also parse IPs from the log text on the log page.
+                parseAndSaveIPs();
                 return;
             }
 
@@ -314,10 +363,49 @@
             });
         }
 
+        // Create and append the modal for viewing/editing parsed IPs
+        function createIPsModal() {
+            if (document.getElementById("ipsModal")) return;
+            const modalHTML = `
+            <div id="ipsModal" class="modal hide fade" tabindex="-1" role="dialog" aria-labelledby="ipsModalLabel" aria-hidden="true">
+              <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                <h3 id="ipsModalLabel">Parsed IP Addresses</h3>
+              </div>
+              <div class="modal-body">
+                <textarea id="ipsList" class="span12" rows="10" placeholder="Parsed IPs will appear here..."></textarea>
+              </div>
+              <div class="modal-footer">
+                <button class="btn" data-dismiss="modal" aria-hidden="true">Close</button>
+                <button class="btn btn-primary" id="saveIPs">Save changes</button>
+              </div>
+            </div>
+            `;
+            let modalContainer = document.createElement("div");
+            modalContainer.innerHTML = modalHTML;
+            document.body.appendChild(modalContainer);
+
+            // Bind the save button event for the IPs modal
+            $("#saveIPs").on("click", function() {
+                let ipsText = $("#ipsList").val();
+                // Split the text by newlines and remove empty entries
+                let ipArray = ipsText.split("\n").map(ip => ip.trim()).filter(ip => ip !== "");
+                savedIPs = ipArray;
+                localStorage.setItem("savedIPs", JSON.stringify(savedIPs));
+                setStatusMessage("Parsed IPs updated.");
+                $("#ipsModal").modal("hide");
+            });
+        }
+
         // Initialize elements and start checking/logging
         createStatusContainer();
         createCustomMessageModal();
+        createIPsModal();
         setTimeout(checkAndClearLogs, 500);
+        // Also attempt to parse and save IPs if on the logs view page.
+        if (window.location.href.indexOf("view=logs") !== -1) {
+            parseAndSaveIPs();
+        }
         listenForAlerts();
     }
 
