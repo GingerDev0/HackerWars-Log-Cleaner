@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         HackerWars Log Cleaner with Dropdown, Custom Log Message & IP Parser
+// @name         HackerWars Log Cleaner with Dropdown, Custom Log Message, IP, BTC & Bank Parser
 // @namespace    http://tampermonkey.net/
-// @version      1.4.0
-// @description  Clears logs if conditions are met, inserts a custom log message, parses IPs (except your own) on the logs page, and provides a modal for editing the saved IPs.
+// @version      1.5.2
+// @description  Clears logs if conditions are met, inserts a custom log message, parses IPs, BTC addresses and Bank accounts from logs, and provides modals for viewing/editing these.
 // @match        https://hackerwars.io/*
 // @grant        none
 // ==/UserScript==
@@ -10,331 +10,431 @@
 (function() {
     'use strict';
 
-    // Wait for the DOM to load (using DOMContentLoaded or readyState)
-    function initScript() {
-        // Get persistent state (default true)
-        let autoClearEnabled = localStorage.getItem("autoClearEnabled");
-        if (autoClearEnabled === null) {
-            autoClearEnabled = true;
-            localStorage.setItem("autoClearEnabled", "true");
-        } else {
-            autoClearEnabled = (autoClearEnabled === "true");
-        }
+    // Persistent settings and saved data
+    let autoClearEnabled = localStorage.getItem("autoClearEnabled");
+    if (autoClearEnabled === null) {
+        autoClearEnabled = true;
+        localStorage.setItem("autoClearEnabled", "true");
+    } else {
+        autoClearEnabled = (autoClearEnabled === "true");
+    }
+    let customLogMessage = localStorage.getItem("customLogMessage") || "";
+    let savedIPs = JSON.parse(localStorage.getItem("savedIPs") || "[]");
+    let savedBTC = JSON.parse(localStorage.getItem("savedBTC") || "[]");
+    let savedBank = JSON.parse(localStorage.getItem("savedBank") || "[]");
 
-        // Retrieve saved custom log message (if any)
-        let customLogMessage = localStorage.getItem("customLogMessage") || "";
-        // Retrieve saved IPs (if any) as an array; stored as JSON string.
-        let savedIPs = JSON.parse(localStorage.getItem("savedIPs") || "[]");
+    // Create the main status container and dropdown menu
+    function createStatusContainer() {
+        let container = document.getElementById("hw-status-container");
+        if (!container) {
+            container = document.createElement("li");
+            container.id = "hw-status-container";
+            container.className = "btn btn-inverse";
+            container.style.position = "relative"; // for dropdown positioning
 
-        // Creates the main status container and dropdown menu
-        function createStatusContainer() {
-            let container = document.getElementById("hw-status-container");
-            if (!container) {
-                container = document.createElement("li");
-                container.id = "hw-status-container";
-                container.className = "btn btn-inverse";
-                container.style.position = "relative"; // for dropdown positioning
+            let link = document.createElement("a");
+            link.href = "#";
 
-                let link = document.createElement("a");
-                link.href = "#";
+            let mainSpan = document.createElement("span");
+            mainSpan.className = "main-status";
 
-                let mainSpan = document.createElement("span");
-                mainSpan.className = "main-status";
+            let icon = document.createElement("i");
+            icon.className = "fa fa-inverse fa-info";
+            mainSpan.appendChild(icon);
 
-                let icon = document.createElement("i");
-                icon.className = "fa fa-inverse fa-info";
-                mainSpan.appendChild(icon);
+            mainSpan.appendChild(document.createTextNode(" "));
 
-                mainSpan.appendChild(document.createTextNode(" "));
+            let textSpan = document.createElement("span");
+            textSpan.className = "text";
+            textSpan.textContent = "Status";
+            mainSpan.appendChild(textSpan);
 
-                let textSpan = document.createElement("span");
-                textSpan.className = "text";
-                textSpan.textContent = "Status";
-                mainSpan.appendChild(textSpan);
+            link.appendChild(mainSpan);
+            container.appendChild(link);
 
-                link.appendChild(mainSpan);
-                container.appendChild(link);
+            // Create dropdown menu (hidden by default)
+            let dropdown = document.createElement("div");
+            dropdown.id = "hw-status-dropdown";
+            dropdown.style.position = "absolute";
+            dropdown.style.top = "100%";
+            dropdown.style.left = "0";
+            dropdown.style.backgroundColor = "#000";
+            dropdown.style.border = "1px solid #ccc";
+            dropdown.style.padding = "5px";
+            dropdown.style.zIndex = "1000";
+            dropdown.style.display = "none";
+            dropdown.style.minWidth = "150px";
 
-                // Create dropdown menu (hidden by default)
-                let dropdown = document.createElement("div");
-                dropdown.id = "hw-status-dropdown";
-                dropdown.style.position = "absolute";
-                dropdown.style.top = "100%";
-                dropdown.style.left = "0";
-                dropdown.style.backgroundColor = "#000";
-                dropdown.style.border = "1px solid #ccc";
-                dropdown.style.padding = "5px";
-                dropdown.style.zIndex = "1000";
-                dropdown.style.display = "none";
-                dropdown.style.minWidth = "150px";
-
-                // Create the auto-clear toggle option
-                let toggleOption = document.createElement("div");
-                toggleOption.id = "hw-auto-clear-toggle";
-                toggleOption.style.cursor = "pointer";
-                toggleOption.style.padding = "5px";
-                toggleOption.style.borderBottom = "1px solid #eee";
+            // Auto-clear toggle option
+            let toggleOption = document.createElement("div");
+            toggleOption.id = "hw-auto-clear-toggle";
+            toggleOption.style.cursor = "pointer";
+            toggleOption.style.padding = "5px";
+            toggleOption.style.borderBottom = "1px solid #eee";
+            toggleOption.textContent = autoClearEnabled ? "Auto Clear Logs: On" : "Auto Clear Logs: Off";
+            toggleOption.addEventListener("click", function(e) {
+                e.stopPropagation();
+                autoClearEnabled = !autoClearEnabled;
+                localStorage.setItem("autoClearEnabled", autoClearEnabled ? "true" : "false");
                 toggleOption.textContent = autoClearEnabled ? "Auto Clear Logs: On" : "Auto Clear Logs: Off";
-                toggleOption.addEventListener("click", function(e) {
-                    e.stopPropagation();
-                    autoClearEnabled = !autoClearEnabled;
-                    localStorage.setItem("autoClearEnabled", autoClearEnabled ? "true" : "false");
-                    toggleOption.textContent = autoClearEnabled ? "Auto Clear Logs: On" : "Auto Clear Logs: Off";
-                    setStatusMessage("Auto Clear toggled " + (autoClearEnabled ? "On" : "Off"));
-                });
-                dropdown.appendChild(toggleOption);
+                setStatusMessage("Auto Clear toggled " + (autoClearEnabled ? "On" : "Off"));
+            });
+            dropdown.appendChild(toggleOption);
 
-                // Create the "Set Custom Log Message" option
-                let customMsgOption = document.createElement("div");
-                customMsgOption.id = "hw-custom-msg-toggle";
-                customMsgOption.style.cursor = "pointer";
-                customMsgOption.style.padding = "5px";
-                customMsgOption.style.borderBottom = "1px solid #eee";
-                customMsgOption.textContent = "Set Log Message";
-                customMsgOption.addEventListener("click", function(e) {
-                    e.stopPropagation();
-                    // Load saved message into the modal textarea before showing
-                    $("#customMessage").val(localStorage.getItem("customLogMessage") || "");
-                    $("#customModal").modal("show");
-                });
-                dropdown.appendChild(customMsgOption);
+            // Custom Log Message option
+            let customMsgOption = document.createElement("div");
+            customMsgOption.id = "hw-custom-msg-toggle";
+            customMsgOption.style.cursor = "pointer";
+            customMsgOption.style.padding = "5px";
+            customMsgOption.style.borderBottom = "1px solid #eee";
+            customMsgOption.textContent = "Set Log Message";
+            customMsgOption.addEventListener("click", function(e) {
+                e.stopPropagation();
+                $("#customMessage").val(localStorage.getItem("customLogMessage") || "");
+                $("#customModal").modal("show");
+            });
+            dropdown.appendChild(customMsgOption);
 
-                // Create the "View/Edit Parsed IPs" option
-                let ipsOption = document.createElement("div");
-                ipsOption.id = "hw-ips-toggle";
-                ipsOption.style.cursor = "pointer";
-                ipsOption.style.padding = "5px";
-                ipsOption.style.borderBottom = "1px solid #eee";
-                ipsOption.textContent = "View/Edit Parsed IPs";
-                ipsOption.addEventListener("click", function(e) {
-                    e.stopPropagation();
-                    // Load saved IPs into the modal textarea before showing
-                    $("#ipsList").val(savedIPs.join("\n"));
-                    $("#ipsModal").modal("show");
-                });
-                dropdown.appendChild(ipsOption);
+            // View/Edit Parsed IPs option
+            let ipsOption = document.createElement("div");
+            ipsOption.id = "hw-ips-toggle";
+            ipsOption.style.cursor = "pointer";
+            ipsOption.style.padding = "5px";
+            ipsOption.style.borderBottom = "1px solid #eee";
+            ipsOption.textContent = "View/Edit Parsed IPs";
+            ipsOption.addEventListener("click", function(e) {
+                e.stopPropagation();
+                $("#ipsList").val(savedIPs.join("\n"));
+                $("#ipsModal").modal("show");
+            });
+            dropdown.appendChild(ipsOption);
 
-                // (Add additional dropdown options here if needed)
+            // View/Edit BTC Addresses option
+            let btcOption = document.createElement("div");
+            btcOption.id = "hw-btc-toggle";
+            btcOption.style.cursor = "pointer";
+            btcOption.style.padding = "5px";
+            btcOption.style.borderBottom = "1px solid #eee";
+            btcOption.textContent = "View/Edit BTC Addresses";
+            btcOption.addEventListener("click", function(e) {
+                e.stopPropagation();
+                renderBTCList();
+                $("#btcModal").modal("show");
+            });
+            dropdown.appendChild(btcOption);
 
-                container.appendChild(dropdown);
+            // View/Edit Bank Accounts option
+            let bankOption = document.createElement("div");
+            bankOption.id = "hw-bank-toggle";
+            bankOption.style.cursor = "pointer";
+            bankOption.style.padding = "5px";
+            bankOption.style.borderBottom = "1px solid #eee";
+            bankOption.textContent = "View/Edit Bank Accounts";
+            bankOption.addEventListener("click", function(e) {
+                e.stopPropagation();
+                renderBankList();
+                $("#bankModal").modal("show");
+            });
+            dropdown.appendChild(bankOption);
 
-                // Toggle dropdown visibility when the status link is clicked
-                link.addEventListener("click", function(e) {
-                    e.preventDefault();
-                    dropdown.style.display = dropdown.style.display === "none" ? "block" : "none";
-                });
+            container.appendChild(dropdown);
 
-                // Hide dropdown when clicking outside the container
-                document.addEventListener("click", function(e) {
-                    if (!container.contains(e.target)) {
-                        dropdown.style.display = "none";
-                    }
-                });
+            // Toggle dropdown visibility
+            link.addEventListener("click", function(e) {
+                e.preventDefault();
+                dropdown.style.display = dropdown.style.display === "none" ? "block" : "none";
+            });
 
-                // Insert the container into the page navigation if available
-                let userNav = document.getElementById("user-nav");
-                if (userNav) {
-                    let btnGroup = userNav.querySelector("ul.nav.btn-group");
-                    if (btnGroup) {
-                        btnGroup.insertBefore(container, btnGroup.firstChild);
-                    } else {
-                        userNav.appendChild(container);
-                    }
-                } else {
-                    document.body.appendChild(container);
-                }
-            }
-            return container;
-        }
-
-        // Overwrite old status messages instead of appending new ones.
-        function setStatusMessage(message) {
-            const container = createStatusContainer();
-            let msgEl = container.querySelector("span.status-msg");
-            if (!msgEl) {
-                msgEl = document.createElement("span");
-                msgEl.className = "status-msg";
-                msgEl.style.fontWeight = "bold";
-                msgEl.style.marginLeft = "10px";
-                const mainSpan = container.querySelector("span.main-status");
-                if (mainSpan) {
-                    mainSpan.appendChild(msgEl);
-                } else {
-                    container.appendChild(msgEl);
-                }
-            }
-            msgEl.textContent = message;
-        }
-
-        // Retrieve your IP from the header element
-        function getMyIP() {
-            let ipElement = document.querySelector('.header-ip-show');
-            if (ipElement) {
-                return ipElement.innerText.trim();
-            }
-            console.log("IP element not found.");
-            return null;
-        }
-
-function parseIPsFromText(text) {
-    // Use a regex to match IPs enclosed in square brackets, e.g., [205.135.68.189]
-    const ipRegex = /\[(\d{1,3}(?:\.\d{1,3}){3})\]/g;
-    let matches = [];
-    let match;
-    while ((match = ipRegex.exec(text)) !== null) {
-        matches.push(match[1]);
-    }
-    // Remove duplicate IPs using a Set and return the result
-    return [...new Set(matches)];
-}
-
-function parseAndSaveIPs() {
-    if (window.location.href.indexOf("view=logs") === -1) return;
-    let logArea = document.querySelector('.logarea');
-    if (!logArea) {
-        console.log("Log area element not found for IP parsing.");
-        return;
-    }
-    let logText = logArea.value || logArea.innerText;
-    let allIPs = parseIPsFromText(logText);
-    let myIP = getMyIP();
-    // Filter out your own IP if present
-    let filteredIPs = allIPs.filter(ip => ip !== myIP);
-    savedIPs = filteredIPs; // update our local variable
-    localStorage.setItem("savedIPs", JSON.stringify(savedIPs));
-    setStatusMessage("Parsed IPs saved: " + savedIPs.join(", "));
-    console.log("Parsed IPs (excluding your IP):", savedIPs);
-}
-
-        // Listen for various alert messages and take appropriate action
-        function listenForAlerts() {
-            function handleAlert(alertElement) {
-                const alertText = alertElement.innerText;
-                if (alertText.includes('Log successfully edited')) {
-                    console.log("Success message detected, redirecting to software page...");
-                    window.location.href = "https://hackerwars.io/internet?view=software";
-                } else if (alertText.includes('Software successfully downloaded')) {
-                    console.log("Software successfully downloaded detected, redirecting to logs page...");
-                    window.location.href = "https://hackerwars.io/internet?view=logs";
-                } else if (alertText.includes('Successfully cracked') && alertText.includes('Password is')) {
-                    console.log("Cracked message detected, clicking the Login button...");
-                    const loginButton = document.querySelector('input[type="submit"].btn.btn-inverse[value="Login"]');
-                    if (loginButton) {
-                        loginButton.click();
-                    } else {
-                        console.log("Login button not found.");
-                    }
-                } else if (alertText.includes('This IP is already on your hacked database')) {
-                    console.log("Error alert detected, clicking the Login button...");
-                    const loginButton = document.querySelector('input[type="submit"].btn.btn-inverse[value="Login"]');
-                    if (loginButton) {
-                        loginButton.click();
-                    } else {
-                        console.log("Login button not found.");
-                    }
-                } else if (alertText.includes('Software uninstalled') || alertText.includes('Software installed')) {
-                    console.log("Software alert detected, redirecting to log page...");
-                    window.location.href = "https://hackerwars.io/log";
-                }
-            }
-
-            // Check if an alert is already present
-            const existingAlertSuccess = document.querySelector('.alert.alert-success');
-            const existingAlertDanger = document.querySelector('.alert.alert-danger');
-            if (existingAlertSuccess) {
-                handleAlert(existingAlertSuccess);
-                return;
-            }
-            if (existingAlertDanger) {
-                handleAlert(existingAlertDanger);
-                return;
-            }
-
-            // Otherwise, observe DOM changes for new alerts
-            const observer = new MutationObserver((mutations, obs) => {
-                const alertSuccess = document.querySelector('.alert.alert-success');
-                const alertDanger = document.querySelector('.alert.alert-danger');
-                if (alertSuccess) {
-                    handleAlert(alertSuccess);
-                    obs.disconnect();
-                    return;
-                }
-                if (alertDanger) {
-                    handleAlert(alertDanger);
-                    obs.disconnect();
-                    return;
+            // Hide dropdown when clicking outside
+            document.addEventListener("click", function(e) {
+                if (!container.contains(e.target)) {
+                    dropdown.style.display = "none";
                 }
             });
-            observer.observe(document.body, { childList: true, subtree: true });
-        }
 
-        // Function that checks the logs and, when necessary, clears the log textarea, inserts the custom log message, then clicks the edit button.
-        function checkAndClearLogs() {
-            if (!autoClearEnabled) {
-                console.log("Auto log clearing is disabled.");
-                setStatusMessage("Auto log clearing is disabled.");
-                return;
-            }
-
-            let logArea = document.querySelector('.logarea');
-            if (!logArea) {
-                console.log("Log area element not found.");
-                setStatusMessage("Looking for logs 👀");
-                return;
-            }
-            let logText = logArea.value || logArea.innerText;
-
-            // Define a helper to clear, insert the custom text, then click the button.
-            function clearAndInsert() {
-                logArea.value = ""; // Clear the textarea
-                // Insert the custom log message (if any)
-                logArea.value = customLogMessage;
-                setStatusMessage("Log updated with custom message.");
-                let editLogBtn = document.querySelector('input[type="submit"][value="Edit log file"]');
-                if (editLogBtn) {
-                    console.log("Clicking the Edit log file button...");
-                    editLogBtn.click();
+            // Insert container into page navigation
+            let userNav = document.getElementById("user-nav");
+            if (userNav) {
+                let btnGroup = userNav.querySelector("ul.nav.btn-group");
+                if (btnGroup) {
+                    btnGroup.insertBefore(container, btnGroup.firstChild);
                 } else {
-                    console.log("Edit log file button not found.");
+                    userNav.appendChild(container);
                 }
-            }
-
-            // If we are on the log page, proceed if the textarea isn't empty.
-            if (window.location.pathname === "/log") {
-                if (logText.trim() !== "") {
-                    console.log("On log page, updating log file with custom message...");
-                    clearAndInsert();
-                } else {
-                    console.log("Log area is already empty. Inserting custom message.");
-                    clearAndInsert();
-                }
-                // Also parse IPs from the log text on the log page.
-                parseAndSaveIPs();
-                return;
-            }
-
-            // Otherwise, check if the log contains your IP and then update if needed.
-            let myIP = getMyIP();
-            if (!myIP) {
-                console.log("Unable to retrieve IP. Aborting log check.");
-                setStatusMessage("IP not found.");
-                return;
-            }
-            console.log("My IP:", myIP);
-            if (logText.includes(myIP) && logText.trim() !== "") {
-                console.log("IP found in logs. Updating log file with custom message...");
-                clearAndInsert();
-                listenForAlerts();
             } else {
-                console.log("IP not found in logs or log area is empty. No action taken.");
-                setStatusMessage("No log entries for IP: " + myIP);
+                document.body.appendChild(container);
+            }
+        }
+        return container;
+    }
+
+    // Display a status message in the status container
+    function setStatusMessage(message) {
+        const container = createStatusContainer();
+        let msgEl = container.querySelector("span.status-msg");
+        if (!msgEl) {
+            msgEl = document.createElement("span");
+            msgEl.className = "status-msg";
+            msgEl.style.fontWeight = "bold";
+            msgEl.style.marginLeft = "10px";
+            let mainSpan = container.querySelector("span.main-status");
+            if (mainSpan) {
+                mainSpan.appendChild(msgEl);
+            } else {
+                container.appendChild(msgEl);
+            }
+        }
+        msgEl.textContent = message;
+    }
+
+    // Retrieve your IP from the header element
+    function getMyIP() {
+        let ipElement = document.querySelector('.header-ip-show');
+        if (ipElement) {
+            return ipElement.innerText.trim();
+        }
+        console.log("IP element not found.");
+        return null;
+    }
+
+    // Parse IP addresses from log text (IPs enclosed in square brackets)
+    function parseIPsFromText(text) {
+        const ipRegex = /\[(\d{1,3}(?:\.\d{1,3}){3})\]/g;
+        let matches = [];
+        let match;
+        while ((match = ipRegex.exec(text)) !== null) {
+            matches.push(match[1]);
+        }
+        return [...new Set(matches)]; // remove duplicates
+    }
+
+    // Checks if the current page should be parsed (either logs, /internet)
+    function shouldParse() {
+        return (window.location.href.indexOf("view=logs") !== -1 || window.location.pathname === "/internet");
+    }
+
+    // Parse and save IPs from logs (excluding your own IP), merging with existing entries
+    function parseAndSaveIPs() {
+        if (!shouldParse()) return;
+        let logArea = document.querySelector('.logarea');
+        if (!logArea) {
+            console.log("Log area element not found for IP parsing.");
+            return;
+        }
+        let logText = logArea.value || logArea.innerText;
+        let allIPs = parseIPsFromText(logText);
+        let myIP = getMyIP();
+        let filteredIPs = myIP ? allIPs.filter(ip => ip !== myIP) : allIPs;
+
+        // Merge with existing saved IPs
+        let existingIPs = JSON.parse(localStorage.getItem("savedIPs") || "[]");
+        let mergedIPs = [...new Set(existingIPs.concat(filteredIPs))];
+
+        savedIPs = mergedIPs;
+        localStorage.setItem("savedIPs", JSON.stringify(savedIPs));
+        setStatusMessage("Parsed IPs saved: " + savedIPs.join(", "));
+        console.log("Merged IPs (excluding your IP):", savedIPs);
+    }
+
+    // Parse and save BTC addresses (account and key) from logs, merging with existing entries
+    function parseAndSaveBTC() {
+        if (!shouldParse()) return;
+        let logArea = document.querySelector('.logarea');
+        if (!logArea) {
+            console.log("Log area element not found for BTC parsing.");
+            return;
+        }
+        let logText = logArea.value || logArea.innerText;
+        // Regex: capture account and key
+        const btcRegex = /on account ([0-9A-Za-z]+)\s+using key ([0-9A-Za-z]+)/g;
+        let matches = [];
+        let match;
+        while ((match = btcRegex.exec(logText)) !== null) {
+            matches.push({account: match[1], key: match[2]});
+        }
+        // Remove duplicate entries from new matches
+        let uniqueBTC = [];
+        matches.forEach(item => {
+            if (!uniqueBTC.find(existing => existing.account === item.account && existing.key === item.key)) {
+                uniqueBTC.push(item);
+            }
+        });
+        // Merge with existing saved BTC entries
+        let existingBTC = JSON.parse(localStorage.getItem("savedBTC") || "[]");
+        uniqueBTC.forEach(newItem => {
+            if (!existingBTC.find(existing => existing.account === newItem.account && existing.key === newItem.key)) {
+                existingBTC.push(newItem);
+            }
+        });
+        savedBTC = existingBTC;
+        localStorage.setItem("savedBTC", JSON.stringify(savedBTC));
+        setStatusMessage("Parsed BTC addresses saved: " + savedBTC.map(item => item.account).join(", "));
+        console.log("Merged BTC addresses:", savedBTC);
+    }
+
+    // Parse and save Bank accounts from logs, merging with existing entries
+    // Expected format: "logged on account #227315218 on bank [37.17.74.243]"
+    // Captures account number and bank IP.
+    function parseAndSaveBank() {
+        if (!shouldParse()) return;
+        let logArea = document.querySelector('.logarea');
+        if (!logArea) {
+            console.log("Log area element not found for Bank parsing.");
+            return;
+        }
+        let logText = logArea.value || logArea.innerText;
+        const bankRegex = /logged on account #([0-9]+)\s+on bank \[([0-9]{1,3}(?:\.[0-9]{1,3}){3})\]/g;
+        let matches = [];
+        let match;
+        while ((match = bankRegex.exec(logText)) !== null) {
+            matches.push({account: match[1], bankIP: match[2]});
+        }
+        // Remove duplicate entries from new matches
+        let uniqueBank = [];
+        matches.forEach(item => {
+            if (!uniqueBank.find(existing => existing.account === item.account && existing.bankIP === item.bankIP)) {
+                uniqueBank.push(item);
+            }
+        });
+        // Merge with existing saved Bank entries
+        let existingBank = JSON.parse(localStorage.getItem("savedBank") || "[]");
+        uniqueBank.forEach(newItem => {
+            if (!existingBank.find(existing => existing.account === newItem.account && existing.bankIP === newItem.bankIP)) {
+                existingBank.push(newItem);
+            }
+        });
+        savedBank = existingBank;
+        localStorage.setItem("savedBank", JSON.stringify(savedBank));
+        setStatusMessage("Parsed Bank accounts saved: " + savedBank.map(item => item.account).join(", "));
+        console.log("Merged Bank accounts:", savedBank);
+    }
+
+    // Listen for alerts and handle actions accordingly
+    function listenForAlerts() {
+        function handleAlert(alertElement) {
+            const alertText = alertElement.innerText;
+            if (alertText.includes('Log successfully edited')) {
+                console.log("Success message detected, redirecting to software page...");
+                window.location.href = "https://hackerwars.io/internet?view=software";
+            } else if (alertText.includes('Software successfully downloaded')) {
+                console.log("Software successfully downloaded detected, redirecting to logs page...");
+                window.location.href = "https://hackerwars.io/internet?view=logs";
+            } else if (alertText.includes('Successfully cracked') && alertText.includes('Password is')) {
+                console.log("Cracked message detected, clicking the Login button...");
+                const loginButton = document.querySelector('input[type="submit"].btn.btn-inverse[value="Login"]');
+                if (loginButton) {
+                    loginButton.click();
+                } else {
+                    console.log("Login button not found.");
+                }
+            } else if (alertText.includes('This IP is already on your hacked database')) {
+                console.log("Error alert detected, clicking the Login button...");
+                const loginButton = document.querySelector('input[type="submit"].btn.btn-inverse[value="Login"]');
+                if (loginButton) {
+                    loginButton.click();
+                } else {
+                    console.log("Login button not found.");
+                }
+            } else if (alertText.includes('Software uninstalled') || alertText.includes('Software installed')) {
+                console.log("Software alert detected, redirecting to log page...");
+                window.location.href = "https://hackerwars.io/log";
             }
         }
 
-        // Create and append the Bootstrap modal for custom log messages
-        function createCustomMessageModal() {
-            if (document.getElementById("customModal")) return;
-            const modalHTML = `
+        const existingAlertSuccess = document.querySelector('.alert.alert-success');
+        const existingAlertDanger = document.querySelector('.alert.alert-danger');
+        if (existingAlertSuccess) {
+            handleAlert(existingAlertSuccess);
+            return;
+        }
+        if (existingAlertDanger) {
+            handleAlert(existingAlertDanger);
+            return;
+        }
+        const observer = new MutationObserver((mutations, obs) => {
+            const alertSuccess = document.querySelector('.alert.alert-success');
+            const alertDanger = document.querySelector('.alert.alert-danger');
+            if (alertSuccess) {
+                handleAlert(alertSuccess);
+                obs.disconnect();
+                return;
+            }
+            if (alertDanger) {
+                handleAlert(alertDanger);
+                obs.disconnect();
+                return;
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+
+    // Check logs, update if needed, and trigger parsing functions
+    function checkAndClearLogs() {
+        if (!autoClearEnabled) {
+            console.log("Auto log clearing is disabled.");
+            setStatusMessage("Auto log clearing is disabled.");
+            return;
+        }
+        let logArea = document.querySelector('.logarea');
+        if (!logArea) {
+            console.log("Log area element not found.");
+            setStatusMessage("Looking for logs 👀");
+            return;
+        }
+        let logText = logArea.value || logArea.innerText;
+        function clearAndInsert() {
+            logArea.value = "";
+            logArea.value = customLogMessage;
+            setStatusMessage("Log updated with custom message.");
+            let editLogBtn = document.querySelector('input[type="submit"][value="Edit log file"]');
+            if (editLogBtn) {
+                console.log("Clicking the Edit log file button...");
+                editLogBtn.click();
+            } else {
+                console.log("Edit log file button not found.");
+            }
+        }
+        if (window.location.pathname === "/log") {
+            if (logText.trim() !== "") {
+                console.log("On log page, updating log file with custom message...");
+                clearAndInsert();
+            } else {
+                console.log("Log area is already empty. Inserting custom message.");
+                clearAndInsert();
+            }
+            // Parse IPs, BTC addresses, and Bank accounts on the log page
+            parseAndSaveIPs();
+            parseAndSaveBTC();
+            parseAndSaveBank();
+            return;
+        }
+        let myIP = getMyIP();
+        if (!myIP) {
+            console.log("Unable to retrieve IP. Aborting log check.");
+            setStatusMessage("IP not found.");
+            return;
+        }
+        console.log("My IP:", myIP);
+        if (logText.includes(myIP) && logText.trim() !== "") {
+            console.log("IP found in logs. Updating log file with custom message...");
+            clearAndInsert();
+            listenForAlerts();
+        } else {
+            console.log("IP not found in logs or log area is empty. No action taken.");
+            setStatusMessage("No log entries for IP: " + myIP);
+        }
+        // Also parse IPs, BTC addresses, and Bank accounts on pages that should be parsed
+        if (shouldParse()) {
+            parseAndSaveIPs();
+            parseAndSaveBTC();
+            parseAndSaveBank();
+        }
+    }
+
+    // Create and append the modal for custom log messages
+    function createCustomMessageModal() {
+        if (document.getElementById("customModal")) return;
+        const modalHTML = `
             <div id="customModal" class="modal hide fade" tabindex="-1" role="dialog" aria-labelledby="customModalLabel" aria-hidden="true">
               <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
@@ -348,25 +448,23 @@ function parseAndSaveIPs() {
                 <button class="btn btn-primary" id="saveCustomMessage">Save changes</button>
               </div>
             </div>
-            `;
-            let modalContainer = document.createElement("div");
-            modalContainer.innerHTML = modalHTML;
-            document.body.appendChild(modalContainer);
+        `;
+        let modalContainer = document.createElement("div");
+        modalContainer.innerHTML = modalHTML;
+        document.body.appendChild(modalContainer);
+        $("#saveCustomMessage").on("click", function() {
+            let newMessage = $("#customMessage").val();
+            localStorage.setItem("customLogMessage", newMessage);
+            customLogMessage = newMessage;
+            setStatusMessage("Custom log message saved.");
+            $("#customModal").modal("hide");
+        });
+    }
 
-            // Bind the save button event (using jQuery)
-            $("#saveCustomMessage").on("click", function() {
-                let newMessage = $("#customMessage").val();
-                localStorage.setItem("customLogMessage", newMessage);
-                customLogMessage = newMessage;
-                setStatusMessage("Custom log message saved.");
-                $("#customModal").modal("hide");
-            });
-        }
-
-        // Create and append the modal for viewing/editing parsed IPs
-        function createIPsModal() {
-            if (document.getElementById("ipsModal")) return;
-            const modalHTML = `
+    // Create and append the modal for viewing/editing parsed IPs
+    function createIPsModal() {
+        if (document.getElementById("ipsModal")) return;
+        const modalHTML = `
             <div id="ipsModal" class="modal hide fade" tabindex="-1" role="dialog" aria-labelledby="ipsModalLabel" aria-hidden="true">
               <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
@@ -380,31 +478,177 @@ function parseAndSaveIPs() {
                 <button class="btn btn-primary" id="saveIPs">Save changes</button>
               </div>
             </div>
-            `;
-            let modalContainer = document.createElement("div");
-            modalContainer.innerHTML = modalHTML;
-            document.body.appendChild(modalContainer);
+        `;
+        let modalContainer = document.createElement("div");
+        modalContainer.innerHTML = modalHTML;
+        document.body.appendChild(modalContainer);
+        $("#saveIPs").on("click", function() {
+            let ipsText = $("#ipsList").val();
+            let ipArray = ipsText.split("\n").map(ip => ip.trim()).filter(ip => ip !== "");
+            savedIPs = ipArray;
+            localStorage.setItem("savedIPs", JSON.stringify(savedIPs));
+            setStatusMessage("Parsed IPs updated.");
+            $("#ipsModal").modal("hide");
+        });
+    }
 
-            // Bind the save button event for the IPs modal
-            $("#saveIPs").on("click", function() {
-                let ipsText = $("#ipsList").val();
-                // Split the text by newlines and remove empty entries
-                let ipArray = ipsText.split("\n").map(ip => ip.trim()).filter(ip => ip !== "");
-                savedIPs = ipArray;
-                localStorage.setItem("savedIPs", JSON.stringify(savedIPs));
-                setStatusMessage("Parsed IPs updated.");
-                $("#ipsModal").modal("hide");
-            });
+    // Create and append the modal for viewing/editing BTC addresses
+    function createBTCModal() {
+        if (document.getElementById("btcModal")) return;
+        const modalHTML = `
+            <div id="btcModal" class="modal hide fade" tabindex="-1" role="dialog" aria-labelledby="btcModalLabel" aria-hidden="true">
+              <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                <h3 id="btcModalLabel">Parsed BTC Addresses</h3>
+              </div>
+              <div class="modal-body">
+                <div id="btcListContainer"></div>
+              </div>
+              <div class="modal-footer">
+                <button class="btn" data-dismiss="modal" aria-hidden="true">Close</button>
+              </div>
+            </div>
+        `;
+        let modalContainer = document.createElement("div");
+        modalContainer.innerHTML = modalHTML;
+        document.body.appendChild(modalContainer);
+    }
+
+    // Render the list of BTC addresses inside the BTC modal
+    function renderBTCList() {
+        let btcListContainer = document.getElementById("btcListContainer");
+        if (!btcListContainer) return;
+        let btcData = JSON.parse(localStorage.getItem("savedBTC") || "[]");
+        btcListContainer.innerHTML = "";
+        if (btcData.length === 0) {
+            btcListContainer.innerHTML = "<p>No BTC addresses found.</p>";
+            return;
         }
+        btcData.forEach((item, index) => {
+            let alertDiv = document.createElement("div");
+            alertDiv.className = "alert alert-info";
+            alertDiv.style.position = "relative";
+            alertDiv.style.paddingRight = "35px";
+            alertDiv.innerHTML = `<strong>${item.account}</strong><br>${item.key}`;
+            let deleteBtn = document.createElement("button");
+            deleteBtn.className = "close";
+            deleteBtn.innerHTML = "&times;";
+            deleteBtn.style.position = "absolute";
+            deleteBtn.style.top = "0";
+            deleteBtn.style.right = "10px";
+            deleteBtn.onclick = function() {
+                btcData.splice(index, 1);
+                localStorage.setItem("savedBTC", JSON.stringify(btcData));
+                renderBTCList();
+            };
+            alertDiv.appendChild(deleteBtn);
+            btcListContainer.appendChild(alertDiv);
+        });
+    }
 
-        // Initialize elements and start checking/logging
+    // Create and append the modal for viewing/editing Bank accounts
+    function createBankModal() {
+        if (document.getElementById("bankModal")) return;
+        const modalHTML = `
+            <div id="bankModal" class="modal hide fade" tabindex="-1" role="dialog" aria-labelledby="bankModalLabel" aria-hidden="true">
+              <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                <h3 id="bankModalLabel">Parsed Bank Accounts</h3>
+              </div>
+              <div class="modal-body">
+                <div id="bankListContainer"></div>
+              </div>
+              <div class="modal-footer">
+                <button class="btn" data-dismiss="modal" aria-hidden="true">Close</button>
+              </div>
+            </div>
+        `;
+        let modalContainer = document.createElement("div");
+        modalContainer.innerHTML = modalHTML;
+        document.body.appendChild(modalContainer);
+    }
+
+    // Render the list of Bank accounts inside the Bank modal
+    function renderBankList() {
+        let bankListContainer = document.getElementById("bankListContainer");
+        if (!bankListContainer) return;
+        let bankData = JSON.parse(localStorage.getItem("savedBank") || "[]");
+        bankListContainer.innerHTML = "";
+        if (bankData.length === 0) {
+            bankListContainer.innerHTML = "<p>No Bank accounts found.</p>";
+            return;
+        }
+        bankData.forEach((item, index) => {
+            let alertDiv = document.createElement("div");
+            alertDiv.className = "alert alert-info";
+            alertDiv.style.position = "relative";
+            alertDiv.style.paddingRight = "35px";
+            alertDiv.innerHTML = `<strong>Acc: ${item.account}</strong><br>Bank IP: ${item.bankIP}`;
+            let deleteBtn = document.createElement("button");
+            deleteBtn.className = "close";
+            deleteBtn.innerHTML = "&times;";
+            deleteBtn.style.position = "absolute";
+            deleteBtn.style.top = "0";
+            deleteBtn.style.right = "10px";
+            deleteBtn.onclick = function() {
+                bankData.splice(index, 1);
+                localStorage.setItem("savedBank", JSON.stringify(bankData));
+                renderBankList();
+            };
+            alertDiv.appendChild(deleteBtn);
+            bankListContainer.appendChild(alertDiv);
+        });
+    }
+
+    // Parse and save Bank accounts from logs, merging with existing entries
+    function parseAndSaveBank() {
+        if (!shouldParse()) return;
+        let logArea = document.querySelector('.logarea');
+        if (!logArea) {
+            console.log("Log area element not found for Bank parsing.");
+            return;
+        }
+        let logText = logArea.value || logArea.innerText;
+        // Regex to capture bank account and bank IP:
+        // e.g., "logged on account #227315218 on bank [37.17.74.243]"
+        const bankRegex = /logged on account #([0-9]+)\s+on bank \[([0-9]{1,3}(?:\.[0-9]{1,3}){3})\]/g;
+        let matches = [];
+        let match;
+        while ((match = bankRegex.exec(logText)) !== null) {
+            matches.push({account: match[1], bankIP: match[2]});
+        }
+        // Remove duplicate entries from new matches
+        let uniqueBank = [];
+        matches.forEach(item => {
+            if (!uniqueBank.find(existing => existing.account === item.account && existing.bankIP === item.bankIP)) {
+                uniqueBank.push(item);
+            }
+        });
+        // Merge with existing saved Bank entries
+        let existingBank = JSON.parse(localStorage.getItem("savedBank") || "[]");
+        uniqueBank.forEach(newItem => {
+            if (!existingBank.find(existing => existing.account === newItem.account && existing.bankIP === newItem.bankIP)) {
+                existingBank.push(newItem);
+            }
+        });
+        savedBank = existingBank;
+        localStorage.setItem("savedBank", JSON.stringify(savedBank));
+        setStatusMessage("Parsed Bank accounts saved: " + savedBank.map(item => item.account).join(", "));
+        console.log("Merged Bank accounts:", savedBank);
+    }
+
+    // Initialize all elements and start processing
+    function initScript() {
         createStatusContainer();
         createCustomMessageModal();
         createIPsModal();
+        createBTCModal();
+        createBankModal();
         setTimeout(checkAndClearLogs, 500);
-        // Also attempt to parse and save IPs if on the logs view page.
-        if (window.location.href.indexOf("view=logs") !== -1) {
+        if (shouldParse()) {
             parseAndSaveIPs();
+            parseAndSaveBTC();
+            parseAndSaveBank();
         }
         listenForAlerts();
     }
