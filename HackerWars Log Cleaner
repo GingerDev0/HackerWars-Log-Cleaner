@@ -1,0 +1,200 @@
+// ==UserScript==
+// @name         HackerWars Log Cleaner
+// @namespace    http://tampermonkey.net/
+// @version      1.0.0
+// @description  Checks logs for your IP, clears them if found, then listens for various success alerts and redirects or logs in accordingly.
+// @match        https://hackerwars.io/*
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    function createStatusContainer() {
+        let container = document.getElementById("hw-status-container");
+        if (!container) {
+            container = document.createElement("li");
+            container.id = "hw-status-container";
+            container.className = "btn btn-inverse";
+
+            let link = document.createElement("a");
+            link.href = "#";
+
+            let mainSpan = document.createElement("span");
+            mainSpan.className = "main-status";
+
+            let icon = document.createElement("i");
+            icon.className = "fa fa-inverse fa-info";
+            mainSpan.appendChild(icon);
+
+            mainSpan.appendChild(document.createTextNode(" "));
+
+            let textSpan = document.createElement("span");
+            textSpan.className = "text";
+            textSpan.textContent = "Status";
+            mainSpan.appendChild(textSpan);
+
+            link.appendChild(mainSpan);
+            container.appendChild(link);
+
+            let userNav = document.getElementById("user-nav");
+            if (userNav) {
+                let btnGroup = userNav.querySelector("ul.nav.btn-group");
+                if (btnGroup) {
+                    btnGroup.insertBefore(container, btnGroup.firstChild);
+                } else {
+                    userNav.appendChild(container);
+                }
+            } else {
+                document.body.appendChild(container);
+            }
+        }
+        return container;
+    }
+
+    function addStatusMessage(message) {
+        const container = createStatusContainer();
+        const msgEl = document.createElement("span");
+        msgEl.textContent = message;
+        msgEl.style.fontWeight = "bold";
+        msgEl.style.marginLeft = "10px";
+        const mainSpan = container.querySelector("span.main-status");
+        if (mainSpan) {
+            mainSpan.appendChild(msgEl);
+        } else {
+            container.appendChild(msgEl);
+        }
+    }
+
+    // Retrieve your IP from the header element
+    function getMyIP() {
+        let ipElement = document.querySelector('.header-ip-show');
+        if (ipElement) {
+            return ipElement.innerText.trim();
+        }
+        console.log("IP element not found.");
+        return null;
+    }
+
+    // Listen for various alert messages and take appropriate action
+    function listenForAlerts() {
+        // Helper to process an alert element's text content
+        function handleAlert(alertElement) {
+            const alertText = alertElement.innerText;
+            if (alertText.includes('Log successfully edited')) {
+                console.log("Success message detected, redirecting to software page...");
+                window.location.href = "https://hackerwars.io/internet?view=software";
+            } else if (alertText.includes('Software successfully downloaded')) {
+                console.log("Software successfully downloaded detected, redirecting to logs page...");
+                window.location.href = "https://hackerwars.io/internet?view=logs";
+            } else if (alertText.includes('Successfully cracked') && alertText.includes('Password is')) {
+                console.log("Cracked message detected, clicking the Login button...");
+                const loginButton = document.querySelector('input[type="submit"].btn.btn-inverse[value="Login"]');
+                if (loginButton) {
+                    loginButton.click();
+                } else {
+                    console.log("Login button not found.");
+                }
+            } else if (alertText.includes('This IP is already on your hacked database')) {
+                console.log("Error alert detected, clicking the Login button...");
+                const loginButton = document.querySelector('input[type="submit"].btn.btn-inverse[value="Login"]');
+                if (loginButton) {
+                    loginButton.click();
+                } else {
+                    console.log("Login button not found.");
+                }
+            } else if (alertText.includes('Software uninstalled') || alertText.includes('Software installed')) {
+                console.log("Software alert detected, redirecting to log page...");
+                window.location.href = "https://hackerwars.io/log";
+            }
+        }
+
+        // Check immediately if any alert (success or danger) is already present
+        const existingAlertSuccess = document.querySelector('.alert.alert-success');
+        const existingAlertDanger = document.querySelector('.alert.alert-danger');
+        if (existingAlertSuccess) {
+            handleAlert(existingAlertSuccess);
+            return;
+        }
+        if (existingAlertDanger) {
+            handleAlert(existingAlertDanger);
+            return;
+        }
+
+        // Otherwise, observe DOM changes for new alerts
+        const observer = new MutationObserver((mutations, obs) => {
+            const alertSuccess = document.querySelector('.alert.alert-success');
+            const alertDanger = document.querySelector('.alert.alert-danger');
+            if (alertSuccess) {
+                handleAlert(alertSuccess);
+                obs.disconnect();
+                return;
+            }
+            if (alertDanger) {
+                handleAlert(alertDanger);
+                obs.disconnect();
+                return;
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+
+    // Function that checks the logs and clears them if on the log page or if your IP is found
+    function checkAndClearLogs() {
+        let logArea = document.querySelector('.logarea');
+        if (!logArea) {
+            console.log("Log area element not found.");
+            addStatusMessage("Looking for logs 👀");
+            return;
+        }
+        let logText = logArea.value || logArea.innerText;
+
+        // If we are on the log page, clear logs unconditionally
+        if (window.location.pathname === "/log") {
+            console.log("On log page, clearing logs...");
+            logArea.value = "";
+            addStatusMessage("Logs cleared.");
+            let editLogBtn = document.querySelector('input[type="submit"][value="Edit log file"]');
+            if (editLogBtn) {
+                console.log("Clicking the Edit log file button...");
+                editLogBtn.click();
+            } else {
+                console.log("Edit log file button not found.");
+            }
+            return;
+        }
+
+        // Otherwise, check if the log contains your IP
+        let myIP = getMyIP();
+        if (!myIP) {
+            console.log("Unable to retrieve IP. Aborting log check.");
+            addStatusMessage("IP not found.");
+            return;
+        }
+        console.log("My IP:", myIP);
+        if (logText.includes(myIP)) {
+            console.log("IP found in logs. Clearing logs...");
+            logArea.value = "";
+            addStatusMessage("Logs cleared for IP: " + myIP);
+            let editLogBtn = document.querySelector('input[type="submit"][value="Edit log file"]');
+            if (editLogBtn) {
+                console.log("Clicking the Edit log file button...");
+                editLogBtn.click();
+                // Start listening for alert messages after editing logs
+                listenForAlerts();
+            } else {
+                console.log("Edit log file button not found.");
+            }
+        } else {
+            console.log("IP not found in logs. No action taken.");
+            addStatusMessage("No log entries for IP: " + myIP);
+        }
+    }
+
+    // Wait a few seconds to ensure the page and logs are fully loaded before attempting to clear logs
+    setTimeout(checkAndClearLogs, 500);
+
+    // Always listen for alert messages on all pages
+    listenForAlerts();
+
+})();
