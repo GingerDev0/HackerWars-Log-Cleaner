@@ -1,10 +1,15 @@
-# HackerWars Log Cleaner
+# HackerWars QOL Script
 
-A Tampermonkey userscript designed to automatically clear your logs on HackerWars if your IP is detected, while dynamically handling various alerts to ensure a smooth workflow.
+A Tampermonkey userscript designed to improve your HackerWars experience by automatically clearing your logs when your IP is detected, inserting a custom log message, and parsing valuable information from your logs—such as IP addresses, BTC addresses, and bank account details—while dynamically handling alerts for a smooth workflow.
 
 ## Overview
 
-**HackerWars Log Cleaner (Dynamic IP)** checks HackerWars logs for your current IP address. If it finds a match, the script clears the logs, inserts a custom message into the log textarea, and then triggers the log update process. Additionally, it monitors for success or error alerts and takes appropriate actions—redirecting you or simulating a login click—ensuring a seamless workflow. A new feature now parses IP addresses from the logs (ignoring duplicates and your own IP) and provides a modal for viewing and editing these IPs.
+**HackerWars QOL Script** monitors your HackerWars logs to detect your current IP address. When your IP is found, the script clears the logs, inserts a custom log message, and triggers the log update process. In addition, it extracts useful information from your logs:
+- **IP addresses:** Parses IPs (ignoring duplicates and your own IP).
+- **BTC addresses:** Captures account and key information.
+- **Bank accounts:** Extracts bank account numbers and bank IPs.
+
+All parsed data is stored persistently in localStorage and can be viewed and edited via user-friendly modals. The script also monitors alerts and takes appropriate actions, such as redirecting you or simulating a login click, ensuring a seamless experience.
 
 ## Features
 
@@ -12,31 +17,41 @@ A Tampermonkey userscript designed to automatically clear your logs on HackerWar
   Retrieves your current IP address from the page header.
 
 - **Automated Log Clearance & Custom Insertion:**  
-  When your IP is found in the logs, the script clears the log textarea and inserts a custom log message (set by the user) before clicking the "Edit log file" button.
+  When your IP is detected in the logs, the script clears the log textarea and inserts a custom log message (set by you) before clicking the "Edit log file" button.
 
 - **Custom Log Message Modal:**  
-  Users can set and save a custom log message via a Bootstrap 2.2 modal. The message is stored in localStorage and will be automatically inserted into the log file during clearance.
+  Set and save a custom log message via a Bootstrap modal. This message is stored in localStorage and automatically inserted when logs are cleared.
 
 - **IP Parsing from Logs:**  
-  On the logs page, the script extracts IP addresses from log entries formatted like:  
+  Parses IP addresses from log entries formatted like:  
   `2025-02-27 20:38 - [XXX.XXX.XXX.XXX] downloaded file Decent Anti-Virus.av (2.0) at localhost`  
-  It removes duplicates and ignores your own IP.
+  It removes duplicates and excludes your own IP.
 
-- **Parsed IPs Modal:**  
-  A new modal is available to view and edit the list of parsed IP addresses. This list is saved in localStorage as a JSON array.
+- **BTC Address Parsing:**  
+  Extracts BTC address details from log lines such as:  
+  `2025-02-27 20:46 - localhost logged in to [238.250.31.113] on account r4IUAo7OchzL3d2nrf0Kg3O4CGpdWV9Qkx using key CjizhbCYHW64509iPddWOw46ipt3zCoZZNg6i06MggKVIzt2feJCzKyiQ7HFmTHq`  
+  The script captures both the account and the key, merging new entries with previously stored data.
+
+- **Bank Account Parsing:**  
+  Extracts bank account information from logs formatted like:  
+  `2025-02-27 20:47 - localhost logged on account #227315218 on bank [37.17.74.243]`  
+  It captures the account number and bank IP, and persists this data in localStorage.
+
+- **Parsed Data Modals:**  
+  Separate modals allow you to view and edit the parsed IP addresses, BTC addresses, and bank accounts.
 
 - **Alert Monitoring:**  
-  Listens for specific alert messages to trigger:
+  Monitors specific alert messages to trigger:
   - Redirects after a successful log edit or software download.
   - Login attempts if duplicate IP errors or password cracked messages are detected.
   - Redirects to the log page on software installation/uninstallation alerts.
 
 - **Status Dropdown Menu with Auto-Clear Toggle:**  
-  The status container integrated into the site's navigation now features a dropdown menu with options to:
-  - Toggle the auto log clearing feature on or off.
+  Integrated into the site's navigation, the status container features a dropdown menu with options to:
+  - Toggle the auto log clearing feature.
   - Open the modal to set a custom log message.
-  - Open the modal to view/edit the parsed IP addresses.
-  
+  - Open the modals to view/edit parsed IP addresses, BTC addresses, and bank accounts.
+
 - **Real-Time Status Updates:**  
   Displays dynamic status messages on the page to keep you informed of each action.
 
@@ -48,7 +63,7 @@ A Tampermonkey userscript designed to automatically clear your logs on HackerWar
 2. **Add the Script:**  
    - Open the Tampermonkey dashboard.
    - Click the **+** button to create a new script.
-   - Paste the entire script (provided in your userscript file) into the editor.
+   - Paste the entire script (provided in the userscript file) into the editor.
    - Save the script.
 
 3. **Script Matching:**  
@@ -57,61 +72,62 @@ A Tampermonkey userscript designed to automatically clear your logs on HackerWar
 ## How It Works
 
 1. **Initialization:**  
-   - The script waits for the page to load and creates a status container that integrates into the site's navigation. This container now includes a dropdown menu with options to toggle auto log clearing, open the custom log message modal, and open the parsed IPs modal.
+   - The script waits for the page to load and creates a status container integrated into the site's navigation.
+   - The dropdown menu offers options to toggle auto log clearing, open the custom log message modal, and access the parsed data modals.
 
 2. **IP Retrieval:**  
-   - It searches for an element with the class `.header-ip-show` to extract your current IP address.
+   - It extracts your current IP address from the element with the class `.header-ip-show`.
 
 3. **Log Checking & Custom Insertion:**  
-   - If on the `/log` page, the script checks if the log textarea contains any text.
-   - If your IP is detected in the logs (or on the log page), the script clears the textarea, inserts your saved custom log message, and then clicks the "Edit log file" button to update the logs.
+   - On the `/log` page (or on `/internet`), the script checks if the log textarea contains any text.
+   - When your IP is detected, it clears the textarea, inserts your saved custom log message, and clicks the "Edit log file" button.
 
-4. **IP Parsing:**  
-   - On the logs page (`view=logs`), the script parses IP addresses from the log entries using a regular expression that targets IPs enclosed in square brackets.
-   - Duplicate IPs are removed and your own IP is filtered out.
-   - The resulting list of IP addresses is saved in localStorage.
+4. **Data Parsing:**  
+   - **IP Parsing:** Extracts IP addresses from log entries, removes duplicates, and excludes your own IP.
+   - **BTC Parsing:** Extracts BTC account and key details from logs.
+   - **Bank Parsing:** Extracts bank account numbers and bank IPs.
+   - All parsed data is merged with existing entries and stored persistently in localStorage.
 
 5. **Alert Monitoring:**  
    - The script listens for DOM changes to detect alerts.
-   - Depending on the alert text, it will either redirect you to a new page or simulate a login button click.
+   - Based on alert text, it may redirect you or simulate a login click.
 
 ## Usage
 
-Once installed, the script automatically executes on any page under `https://hackerwars.io/*`. Use the "Status" dropdown in the navigation to:
-- Monitor updates regarding log clearance, alert handling, and IP parsing.
-- Toggle the auto log clearing feature on or off.
-- Open the modal to set or update your custom log message.
-- Open the modal to view and edit the parsed IP addresses.
+After installation, the script runs automatically on any page under `https://hackerwars.io/*`. Use the "Status" dropdown in the navigation to:
+- Monitor updates regarding log clearance, alert handling, and data parsing.
+- Toggle the auto log clearing feature.
+- Open the modals to set or update your custom log message, or to view/edit parsed IP addresses, BTC addresses, and bank accounts.
 
 ## Troubleshooting
 
 - **IP Not Detected:**  
-  Ensure the element with class `.header-ip-show` exists on the page. If not, verify that the page layout hasn't changed.
+  Ensure the element with the class `.header-ip-show` is present. If not, check for layout changes.
 
 - **Missing Log Area:**  
-  If the script logs "Log area element not found," check that you're on the correct page where logs are displayed.
+  If you see a "Log area element not found" message, verify you are on the correct page where logs are displayed.
 
-- **IP Parsing Issues:**  
-  - Verify that log entries follow the expected format (e.g., `[205.135.68.189]`).
-  - Check the browser console for debugging logs related to IP extraction.
-  - Confirm that localStorage is updating with the `savedIPs` key.
+- **Data Parsing Issues:**  
+  - Confirm log entries follow the expected formats (e.g., `[205.135.68.189]` for IPs, the proper format for BTC and bank entries).
+  - Check the browser console for debugging logs regarding data extraction.
+  - Ensure localStorage is updating with keys like `savedIPs`, `savedBTC`, and `savedBank`.
 
 - **Alert Handling Issues:**  
-  If redirection or login actions are not occurring as expected, inspect your browser's console for error messages and confirm that the site's DOM matches the selectors used in the script.
+  If expected actions (redirects or login simulations) are not occurring, inspect the browser console for errors and verify that the site's DOM matches the script's selectors.
 
 ## Customization
 
 - **Styling:**  
-  You can customize the appearance of the status container, dropdown menu, and modals by modifying the relevant sections in the script.
+  Modify the script sections for the status container, dropdown menu, and modals to adjust their appearance.
 
 - **Alert Conditions:**  
-  The script uses text matching to determine actions. If HackerWars updates its alert messages, update the text conditions in the `handleAlert` function accordingly.
+  Update the text conditions in the alert handling function if HackerWars changes its alert messages.
 
 - **Custom Log Message:**  
-  Update the custom log message via the modal. The message is saved in localStorage and automatically inserted into the log file when logs are cleared.
+  Set or update your custom log message via the modal. This message is saved in localStorage and automatically inserted during log clearance.
 
-- **Parsed IPs List:**  
-  You can view and edit the parsed IP addresses through the new modal. The list is maintained in localStorage and reflects the unique IP addresses extracted from the logs (excluding your own).
+- **Parsed Data Lists:**  
+  View and edit the parsed IP addresses, BTC addresses, and bank accounts through their respective modals. The lists are stored as JSON in localStorage and merged with new entries as they are parsed.
 
 ## License
 
