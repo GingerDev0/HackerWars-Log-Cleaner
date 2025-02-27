@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HackerWars Log Cleaner with Dropdown Toggle
 // @namespace    http://tampermonkey.net/
-// @version      1.1.0
+// @version      1.1.1
 // @description  Checks logs for your IP, clears them if found (when enabled), then listens for various alerts and redirects/logs in accordingly.
 // @match        https://hackerwars.io/*
 // @grant        none
@@ -112,26 +112,26 @@
         return container;
     }
 
-// Overwrite old status messages instead of appending new ones.
-function setStatusMessage(message) {
-    const container = createStatusContainer();
-    // Try to locate an existing message element.
-    let msgEl = container.querySelector("span.status-msg");
-    if (!msgEl) {
-        msgEl = document.createElement("span");
-        msgEl.className = "status-msg";
-        msgEl.style.fontWeight = "bold";
-        msgEl.style.marginLeft = "10px";
-        const mainSpan = container.querySelector("span.main-status");
-        if (mainSpan) {
-            mainSpan.appendChild(msgEl);
-        } else {
-            container.appendChild(msgEl);
+    // Overwrite old status messages instead of appending new ones.
+    function setStatusMessage(message) {
+        const container = createStatusContainer();
+        // Try to locate an existing message element.
+        let msgEl = container.querySelector("span.status-msg");
+        if (!msgEl) {
+            msgEl = document.createElement("span");
+            msgEl.className = "status-msg";
+            msgEl.style.fontWeight = "bold";
+            msgEl.style.marginLeft = "10px";
+            const mainSpan = container.querySelector("span.main-status");
+            if (mainSpan) {
+                mainSpan.appendChild(msgEl);
+            } else {
+                container.appendChild(msgEl);
+            }
         }
+        // Overwrite the existing text.
+        msgEl.textContent = message;
     }
-    // Overwrite the existing text.
-    msgEl.textContent = message;
-}
 
     // Retrieve your IP from the header element
     function getMyIP() {
@@ -221,22 +221,27 @@ function setStatusMessage(message) {
         }
         let logText = logArea.value || logArea.innerText;
 
-        // If we are on the log page, clear logs unconditionally
+        // If we are on the log page, only clear logs if the textarea isn't empty
         if (window.location.pathname === "/log") {
-            console.log("On log page, clearing logs...");
-            logArea.value = "";
-            setStatusMessage("Logs cleared.");
-            let editLogBtn = document.querySelector('input[type="submit"][value="Edit log file"]');
-            if (editLogBtn) {
-                console.log("Clicking the Edit log file button...");
-                editLogBtn.click();
+            if (logText.trim() !== "") {
+                console.log("On log page, clearing logs...");
+                logArea.value = "";
+                setStatusMessage("Logs cleared.");
+                let editLogBtn = document.querySelector('input[type="submit"][value="Edit log file"]');
+                if (editLogBtn) {
+                    console.log("Clicking the Edit log file button...");
+                    editLogBtn.click();
+                } else {
+                    console.log("Edit log file button not found.");
+                }
             } else {
-                console.log("Edit log file button not found.");
+                console.log("Log area is already empty. Not clicking the clear logs button.");
+                setStatusMessage("Log file is already empty.");
             }
             return;
         }
 
-        // Otherwise, check if the log contains your IP
+        // Otherwise, check if the log contains your IP and ensure the textarea isn't empty
         let myIP = getMyIP();
         if (!myIP) {
             console.log("Unable to retrieve IP. Aborting log check.");
@@ -244,7 +249,7 @@ function setStatusMessage(message) {
             return;
         }
         console.log("My IP:", myIP);
-        if (logText.includes(myIP)) {
+        if (logText.includes(myIP) && logText.trim() !== "") {
             console.log("IP found in logs. Clearing logs...");
             logArea.value = "";
             setStatusMessage("Logs cleared for IP: " + myIP);
@@ -258,7 +263,7 @@ function setStatusMessage(message) {
                 console.log("Edit log file button not found.");
             }
         } else {
-            console.log("IP not found in logs. No action taken.");
+            console.log("IP not found in logs or log area is empty. No action taken.");
             setStatusMessage("No log entries for IP: " + myIP);
         }
     }
