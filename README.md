@@ -19,7 +19,7 @@ A Tampermonkey userscript designed to automatically clear your logs on HackerWar
 
 - **IP Parsing from Logs:**  
   On the logs page, the script extracts IP addresses from log entries formatted like:  
-  `2025-02-27 20:38 - [205.135.68.189] downloaded file Decent Anti-Virus.av (2.0) at localhost`  
+  `2025-02-27 20:38 - [XXX.XXX.XXX.XXX] downloaded file Decent Anti-Virus.av (2.0) at localhost`  
   It removes duplicates and ignores your own IP.
 
 - **Parsed IPs Modal:**  
